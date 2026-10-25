@@ -1,0 +1,11 @@
+Use case: logo-brand
+Asset type: final PNG application icon for the Time Saver Windows launcher.
+Primary request: Create exactly ONE polished square icon: a simple stopwatch and a bold lightning bolt fused into one instantly recognizable symbol for saving time.
+Scene/backdrop: genuinely transparent background with an alpha channel; no backdrop.
+Style/medium: crisp flat graphic, minimal geometric skeleton with a small playful pop-art energy; professional application icon, vector-like edges.
+Composition/framing: centered single symbol occupying about 85% of a square 1024 by 1024 canvas, with balanced transparent padding and no clipping. Make the silhouette exceptionally legible when reduced to 16 by 16 pixels.
+Subject: sturdy round stopwatch outline with a short top button; one large lightning bolt integrated clearly within the watch face. Very few elements, thick clean consistent dark contours, broad shapes and strong negative space.
+Color palette: warm golden yellow with very dark charcoal outlines. Flat solid fills.
+Text: none.
+Constraints: one finished icon only, no contact sheet or multiple alternatives. Preserve actual transparency.
+Avoid: words, letters, numbers, tiny ticks, thin lines, fine details, photography, 3D, gradients, shadows, mockup, presentation frame, watermark, checkerboard background.

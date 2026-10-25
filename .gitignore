@@ -1,0 +1,22 @@
+# Generated outputs
+*.exe
+*.dll
+*.pdb
+launcher/build/
+
+# Local settings, credentials, state and runtime data
+launcher/state.json
+launcher/tools.json
+launcher/logs/
+launcher/backups/
+**/config.json
+**/config.ini
+**/.env
+**/.env.*
+**/*.log
+**/*.bak
+**/Profile/
+**/node_modules/
+.DS_Store
+.vs/
+.vscode/
