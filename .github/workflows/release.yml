@@ -1,0 +1,78 @@
+name: Publish Windows Release
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release.yml]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ inputs.version || 'v0.1.0' }}
+    steps:
+      - name: Check out exact source revision
+        shell: pwsh
+        run: |
+          git init .
+          if ($LASTEXITCODE -ne 0) { throw 'git init failed' }
+          git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
+          if ($LASTEXITCODE -ne 0) { throw 'git remote failed' }
+          git fetch --depth=1 origin $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
+          git checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'git checkout failed' }
+      - name: Build, test, package and publish
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_VERSION
+          if ($version -notmatch '^v\d+\.\d+\.\d+$') { throw 'Expected version vMAJOR.MINOR.PATCH' }
+          gh release view $version --repo $env:GITHUB_REPOSITORY --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output "Release $version already exists; leaving it unchanged."
+            exit 0
+          }
+          powershell -NoProfile -ExecutionPolicy Bypass -File launcher/build.ps1 -Test
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          & ./launcher/build/TimeSaver.Tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+          & ./launcher/build/TimeSaver.Tests.exe --ui-selftest
+          if ($LASTEXITCODE -ne 0) { throw 'UI tests failed' }
+          $name = "TimeSaver-$version-windows-x64"
+          $package = Join-Path $env:RUNNER_TEMP $name
+          $icons = Join-Path $package 'launcher/assets/icon-v1'
+          New-Item -ItemType Directory -Path $icons -Force | Out-Null
+          Copy-Item ./TimeSaver.exe $package
+          Copy-Item ./README.md $package
+          Copy-Item ./launcher/assets/icon-v1/TimeSaver.ico $icons
+          $zip = Join-Path $env:GITHUB_WORKSPACE "$name.zip"
+          Compress-Archive -Path "$package/*" -DestinationPath $zip
+          $sumFile = Join-Path $env:GITHUB_WORKSPACE 'SHA256SUMS.txt'
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name.zip" | Set-Content -LiteralPath $sumFile -Encoding ascii
+          $notes = @"
+          Windows x64 首个启动器发行版，含嵌入图标、四工具入口、图形配置与备份恢复。
+          下载 ZIP 后解压运行 TimeSaver.exe；需要 .NET Framework 4.8。
+          发行包仅包含启动器、说明和图标，第三方工具需自行准备。
+          来源链接见 README。真实平台运行仍需自行验收。
+          "@
+          $notesFile = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          $notes | Set-Content -LiteralPath $notesFile -Encoding utf8
+          gh release create $version $zip $sumFile --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Time Saver $version" --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) { throw 'Release publishing failed' }
