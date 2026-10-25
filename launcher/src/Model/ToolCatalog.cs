@@ -87,7 +87,7 @@ namespace TimeSaver.Model
             catalog.Tools.Add(BuildAutovisor());
             catalog.Tools.Add(BuildUnipus());
             catalog.Tools.Add(BuildDomooc());
-            catalog.Tools.Add(BuildXuexitong());
+            catalog.Tools.Add(BuildXuexitong(paths));
             catalog.AppendExtras(paths);
             return catalog;
         }
@@ -213,7 +213,7 @@ namespace TimeSaver.Model
             return mode;
         }
 
-        private static ToolDefinition BuildXuexitong()
+        private static ToolDefinition BuildXuexitong(PathResolver paths)
         {
             ToolDefinition tool = new ToolDefinition();
             tool.Id = "xuexitong";
@@ -221,7 +221,11 @@ namespace TimeSaver.Model
             tool.Directory = @"xuexitong_shuake26.10\exe)";
             tool.Description = "学习通刷课工具（start.exe / main.exe，随附 edgedriver_win64 与用户须知）。";
             tool.ConfigKind = ToolConfigKind.None;
-            tool.RequiredFiles = new string[] { "start.exe", "main.exe" };
+            string mainPath = "main.exe";
+            if (!File.Exists(paths.Combine(tool.Directory, mainPath)) &&
+                File.Exists(paths.Combine(tool.Directory, "task", "main.exe")))
+                mainPath = @"task\main.exe";
+            tool.RequiredFiles = new string[] { "start.exe", mainPath };
             tool.OptionalFiles = new string[] { "edgedriver_win64", "用户须知.pdf", @"task\tool\Help.txt" };
             tool.DocsHint = "官方说明只以问答形式提到 Start/Main，没有入口清单；启动器不宣称已验证，运行前请自行选择并核对。";
 
@@ -236,8 +240,8 @@ namespace TimeSaver.Model
 
             ToolEntryPoint main = new ToolEntryPoint();
             main.Id = "main";
-            main.Name = "main.exe";
-            main.ExeRelativePath = "main.exe";
+            main.Name = mainPath;
+            main.ExeRelativePath = mainPath;
             main.Confirmed = false;
             main.Evidence = "同一问答的兜底说法：「如果还是没有反应，那就再把这个窗口关掉，直接双击运行那个 Main 程序」。";
             tool.Entries.Add(main);

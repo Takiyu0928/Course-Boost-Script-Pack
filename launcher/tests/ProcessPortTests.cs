@@ -193,6 +193,17 @@ namespace TimeSaver.Tests
             runner.True("入口证据引用说明文件",
                 xuexitong.FindEntry("start").Evidence.IndexOf("Help.txt", StringComparison.Ordinal) >= 0,
                 xuexitong.FindEntry("start").Evidence);
+
+            string layoutRoot = Temp.NewDirectory("xuexitong-layout");
+            string legacyRoot = Path.Combine(layoutRoot, @"xuexitong_shuake26.10\exe)");
+            Directory.CreateDirectory(Path.Combine(legacyRoot, "task"));
+            File.WriteAllText(Path.Combine(legacyRoot, "task", "main.exe"), "test fixture only");
+            ToolDefinition nested = ToolCatalog.CreateDefault(PathResolver.ForRoot(layoutRoot)).Find("xuexitong");
+            runner.Equal("新版 main 入口保留 task 子目录", @"task\main.exe", nested.FindEntry("main").ExeRelativePath);
+            runner.True("新版预检要求实际存在的 main 路径", Array.IndexOf(nested.RequiredFiles, @"task\main.exe") >= 0, "错误路径");
+            File.WriteAllText(Path.Combine(legacyRoot, "main.exe"), "test fixture only");
+            ToolDefinition legacy = ToolCatalog.CreateDefault(PathResolver.ForRoot(layoutRoot)).Find("xuexitong");
+            runner.Equal("旧版根目录 main 入口优先", "main.exe", legacy.FindEntry("main").ExeRelativePath);
         }
 
         private static int FindFreePort()

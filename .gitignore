@@ -3,6 +3,9 @@
 *.dll
 *.pdb
 launcher/build/
+dist/
+**/__pycache__/
+*.pyc
 
 # Local settings, credentials, state and runtime data
 launcher/state.json

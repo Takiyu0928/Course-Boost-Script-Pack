@@ -1,0 +1,54 @@
+name: Publish Clean Full Bundle
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/full-pack.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: publish-full-bundle
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout source
+        shell: pwsh
+        run: |
+          git init .
+          git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Checkout failed' }
+          git checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Checkout failed' }
+      - name: Build, verify and publish full bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release view v0.1.1 --repo $env:GITHUB_REPOSITORY --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output 'v0.1.1 already exists; leaving it unchanged.'
+            exit 0
+          }
+          powershell -NoProfile -ExecutionPolicy Bypass -File launcher/build.ps1 -Test
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          & ./launcher/build/TimeSaver.Tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+          & ./launcher/build/TimeSaver.Tests.exe --ui-selftest
+          if ($LASTEXITCODE -ne 0) { throw 'UI tests failed' }
+          python packaging/build_full_pack.py dist
+          if ($LASTEXITCODE -ne 0) { throw 'Clean bundle verification failed' }
+          $notes = @"
+          四工具干净整合包：Autovisor 3.18.4、UnipusAI 3.6、学习通脚本 2026-10-25、domooc 本机版（Firefox 158.0.1）。
+          已清空账号、密码、API Key、课程状态，排除个人 Cookie、密码库、历史、会话与缓存。domooc 保留用户确认无个人数据的脚本库及多个本地脚本和说明。
+          解压后运行 TimeSaver.exe。首次使用需自行登录、配置模型，并确认 Firefox 扩展已启用。
+          本包含第三方许可证与对应源码归档；学习通脚本仅限非商业用途。Node.js/Python 按所用模式另行准备，实际平台运行需人工验收。
+          "@
+          $notesFile = Join-Path $env:RUNNER_TEMP 'full-pack-notes.md'
+          $notes | Set-Content -LiteralPath $notesFile -Encoding utf8
+          gh release create v0.1.1 ./dist/Course-Boost-Script-Pack-v0.1.1-windows-x64-full.zip ./dist/SHA256SUMS-full.txt --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Course Boost Script Pack v0.1.1 - Full Bundle" --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) { throw 'Release publishing failed' }
