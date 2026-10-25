@@ -13,7 +13,20 @@ Windows 工具整合启动器：集中管理本地工具的启动、环境检查
 - 五页签：启动、设置、备份、诊断、帮助；托盘驻留与窗口位置记忆。
 - 秒表与闪电图标已嵌入 EXE、窗口和托盘。
 
+## 项目来源
+
+| 接入工具 | 原项目仓库或名称 |
+| --- | --- |
+| Autovisor | [CXRunfree/Autovisor](https://github.com/CXRunfree/Autovisor) |
+| UnipusAI | [Zzj-klwgxdz/UnipusAI](https://github.com/Zzj-klwgxdz/UnipusAI) |
+| 学习通刷课脚本 | [Mortal004/Xuexitong_shuake](https://github.com/Mortal004/Xuexitong_shuake) |
+| domooc 本机版 | domooc |
+
+本启动器负责本地工具的启动与配置管理，相关工具由原项目各自维护；第三方程序不随本仓库或启动器发行包分发。
+
 ## 获取与构建
+
+发行包与版本说明见 [Releases](https://github.com/Takiyu0928/Course-Boost-Script-Pack/releases)。
 
 需要 Windows x64、.NET Framework 4.8 及其 `Framework64` 编译器。本项目使用系统编译器构建，不需要 .NET SDK、Visual Studio 或 NuGet 包。
 
