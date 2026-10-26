@@ -103,6 +103,8 @@ def main():
         if key.lower() in ('username','password','cookie','authorization','refresh_token','api_key','x_annotator_auth_token','annotator_key','open_id','course_id','class_id','curricula_id'):
             settings[key]=''
     for name in ('config.json','config.example.json'): (uni/name).write_text(json.dumps(settings,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    for name in ('Import-Missing-Units.cmd','U校园使用说明.md'):
+        shutil.copy2(REPO/'docs/unipus'/name,uni/name)
     xue=bundle/'xuexitong_shuake26.10'
     unzip(downloads/'xuexitong.zip',xue)
     account=next(xue.rglob('account_info.json'))

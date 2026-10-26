@@ -28,6 +28,8 @@ Windows 工具整合启动器：集中管理本地工具的启动、环境检查
 
 发行包与版本说明见 [Releases](https://github.com/Takiyu0928/Course-Boost-Script-Pack/releases)。
 
+U 校园用户参阅 [UnipusAI 使用说明](docs/unipus/U校园使用说明.md)。v0.1.1 Release 另附 `UnipusAI-v3.6-usage-and-import.zip`：解压到完整整合包根目录并合并文件夹，双击其中的 `Import-Missing-Units.cmd` 可按当前配置增量补抓缺失单元。原完整包保持不变；补充包不含账号、配置或数据库，也不解决服务端权限与限流问题。
+
 需要 Windows x64、.NET Framework 4.8 及其 `Framework64` 编译器。本项目使用系统编译器构建，不需要 .NET SDK、Visual Studio 或 NuGet 包。
 
 在仓库根目录执行：
