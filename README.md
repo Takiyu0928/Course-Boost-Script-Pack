@@ -2,7 +2,9 @@
 
 <img src="launcher/assets/icon-v1/time-saver-icon.png" width="96" alt="Time Saver icon">
 
-Windows 工具整合启动器：集中管理本地工具的启动、环境检查、常用配置、日志和备份。
+几个主流网课平台脚本的懒人整合包，为了方便管理加了一个启动器。
+
+启动器支持集中管理本地工具的启动、环境检查、常用配置、日志和备份。
 
 ## 功能
 

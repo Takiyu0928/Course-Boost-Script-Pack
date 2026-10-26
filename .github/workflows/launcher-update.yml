@@ -1,0 +1,61 @@
+name: Publish Launcher Update
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/launcher-update.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: publish-launcher-update
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout source
+        shell: pwsh
+        run: |
+          git init .
+          git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
+          git fetch --depth=1 origin $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Checkout failed' }
+          git checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Checkout failed' }
+      - name: Build, verify and publish launcher update
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          powershell -NoProfile -ExecutionPolicy Bypass -File launcher/build.ps1 -Test
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+          & ./launcher/build/TimeSaver.Tests.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+          & ./launcher/build/TimeSaver.Tests.exe --ui-selftest
+          if ($LASTEXITCODE -ne 0) { throw 'UI tests failed' }
+          New-Item -ItemType Directory -Path dist/stage/launcher/assets/icon-v1 -Force | Out-Null
+          New-Item -ItemType Directory -Path dist/stage/docs -Force | Out-Null
+          Copy-Item TimeSaver.exe, README.md dist/stage/
+          Copy-Item launcher/assets/icon-v1/TimeSaver.ico, launcher/assets/icon-v1/time-saver-icon.png dist/stage/launcher/assets/icon-v1/
+          Copy-Item docs/unipus dist/stage/docs/ -Recurse
+          Compress-Archive -Path dist/stage/* -DestinationPath dist/TimeSaver-launcher-update.zip
+          Copy-Item README.md dist/README.md
+          $lines = foreach ($name in @('TimeSaver-launcher-update.zip', 'README.md')) {
+            $hash = (Get-FileHash -LiteralPath (Join-Path dist $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name"
+          }
+          $lines | Set-Content dist/SHA256SUMS-launcher-update.txt -Encoding ascii
+          gh release upload v0.1.1 dist/TimeSaver-launcher-update.zip dist/README.md dist/SHA256SUMS-launcher-update.txt --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher upload failed' }
+          $json = gh release view v0.1.1 --repo $env:GITHUB_REPOSITORY --json body
+          if ($LASTEXITCODE -ne 0) { throw 'Release read failed' }
+          $body = ($json | ConvertFrom-Json).body
+          if ($body -notmatch '<!-- launcher-repository-update -->') {
+            $body += "`n`n<!-- launcher-repository-update -->`n## 启动器更新：项目仓库入口`n新版顶部增加项目仓库按钮，帮助页展示完整可点击地址；README 补充项目定位说明。`n下载 TimeSaver-launcher-update.zip，先从托盘退出启动器，再解压到原完整整合包根目录并合并覆盖。更新包只包含启动器、README、图标及说明文档，不包含账号配置或第三方工具。原 full ZIP 保持不变；首次下载 full 包后也请应用本更新。`n校验值见 SHA256SUMS-launcher-update.txt。`n"
+            $notes = Join-Path $env:RUNNER_TEMP 'launcher-update-notes.md'
+            $body | Set-Content -LiteralPath $notes -Encoding utf8
+            gh release edit v0.1.1 --repo $env:GITHUB_REPOSITORY --notes-file $notes
+            if ($LASTEXITCODE -ne 0) { throw 'Release notes update failed' }
+          }

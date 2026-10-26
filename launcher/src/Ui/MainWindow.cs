@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -25,6 +26,7 @@ namespace TimeSaver.Ui
     /// </summary>
     public sealed class MainWindow : Window
     {
+        private const string RepositoryUrl = "https://github.com/Takiyu0928/Course-Boost-Script-Pack";
         private readonly LauncherContext _context;
         private readonly WindowStateStore _state;
         private readonly string _statePath;
@@ -111,10 +113,19 @@ namespace TimeSaver.Ui
             header.BorderBrush = Theme.Line;
             header.BorderThickness = new Thickness(0, 0, 0, 1);
             header.Padding = new Thickness(18, 14, 18, 12);
+            DockPanel headerLayout = new DockPanel();
+            Button repository = Theme.Button("项目仓库 ↗", false, false);
+            repository.ToolTip = RepositoryUrl;
+            repository.VerticalAlignment = VerticalAlignment.Center;
+            repository.Margin = new Thickness(16, 0, 0, 0);
+            repository.Click += delegate { OpenRepository(); };
+            DockPanel.SetDock(repository, Dock.Right);
+            headerLayout.Children.Add(repository);
             StackPanel headerPanel = new StackPanel();
             headerPanel.Children.Add(Theme.Title("Time Saver"));
             headerPanel.Children.Add(Theme.Muted13("选择左侧工具 → 启动。配置只在点“保存设置”时写入，并先自动备份。"));
-            header.Child = headerPanel;
+            headerLayout.Children.Add(headerPanel);
+            header.Child = headerLayout;
             DockPanel.SetDock(header, Dock.Top);
             root.Children.Add(header);
 
@@ -845,6 +856,17 @@ namespace TimeSaver.Ui
         {
             StackPanel panel = new StackPanel();
 
+            panel.Children.Add(Theme.Label("项目仓库", Theme.FontSection, Theme.Ink));
+            TextBlock repository = Theme.Body(string.Empty);
+            repository.Margin = new Thickness(0, 4, 0, 14);
+            Hyperlink link = new Hyperlink(new Run(RepositoryUrl));
+            link.NavigateUri = new Uri(RepositoryUrl);
+            link.Foreground = Theme.Ink;
+            link.ToolTip = "使用默认浏览器打开项目仓库";
+            link.Click += delegate { OpenRepository(); };
+            repository.Inlines.Add(link);
+            panel.Children.Add(repository);
+
             panel.Children.Add(Theme.Label("启动入口依据", Theme.FontSection, Theme.Ink));
             foreach (ToolEntryPoint entry in _current.Entries)
             {
@@ -1194,6 +1216,22 @@ namespace TimeSaver.Ui
         private void OpenPath(string path)
         {
             OpenWith("explorer.exe", path, "打开目录");
+        }
+
+        private void OpenRepository()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = RepositoryUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception error)
+            {
+                Alert("打开项目仓库失败：" + error.Message, "项目仓库");
+            }
         }
 
         /// <summary>Fixed executable + one quoted path. Never a shell string built from input.</summary>
