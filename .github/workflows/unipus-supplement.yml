@@ -36,23 +36,31 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Helper verification failed' }
           New-Item -ItemType Directory -Path dist/stage/UnipusAI-v3.6-windows-x86-64 -Force | Out-Null
           Copy-Item docs/unipus/* dist/stage/UnipusAI-v3.6-windows-x86-64/
-          Copy-Item docs/unipus/* dist/
+          Copy-Item docs/unipus/Import-Missing-Units.cmd dist/
+          Copy-Item docs/unipus/U校园使用说明.md dist/UnipusAI-Usage.zh-CN.md
           Compress-Archive -Path dist/stage/* -DestinationPath dist/UnipusAI-v3.6-usage-and-import.zip
-          $assets = @('UnipusAI-v3.6-usage-and-import.zip', 'Import-Missing-Units.cmd', 'U校园使用说明.md')
+          $assets = @('UnipusAI-v3.6-usage-and-import.zip', 'Import-Missing-Units.cmd', 'UnipusAI-Usage.zh-CN.md')
           $lines = foreach ($name in $assets) {
             $hash = (Get-FileHash -LiteralPath (Join-Path dist $name) -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $name"
           }
           $lines | Set-Content dist/SHA256SUMS-unipus.txt -Encoding utf8
-          gh release upload v0.1.1 dist/UnipusAI-v3.6-usage-and-import.zip dist/Import-Missing-Units.cmd dist/U校园使用说明.md dist/SHA256SUMS-unipus.txt --clobber --repo $env:GITHUB_REPOSITORY
+          gh release upload v0.1.1 dist/UnipusAI-v3.6-usage-and-import.zip dist/Import-Missing-Units.cmd dist/UnipusAI-Usage.zh-CN.md dist/SHA256SUMS-unipus.txt --clobber --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { throw 'Supplement upload failed' }
           $json = gh release view v0.1.1 --repo $env:GITHUB_REPOSITORY --json body
           if ($LASTEXITCODE -ne 0) { throw 'Release read failed' }
           $body = ($json | ConvertFrom-Json).body
+          $body = $body.Replace('单独下载 U校园使用说明.md 和', '单独下载 UnipusAI-Usage.zh-CN.md（中文说明）和')
           if ($body -notmatch '<!-- unipus-supplement -->') {
-            $body += "`n`n<!-- unipus-supplement -->`n## U 校园使用说明与一键补抓补充包`n下载 UnipusAI-v3.6-usage-and-import.zip，解压到完整整合包根目录并合并文件夹。也可单独下载 U校园使用说明.md 和 Import-Missing-Units.cmd。`n补抓脚本读取已保存配置，执行 dump-text 增量导入；不会强制清库或执行答题与课程提交。遇到权限或限流错误仍需按说明排查。`n原 full ZIP 保留不变，此补充包不含账号、配置、数据库或新二进制。校验值见 SHA256SUMS-unipus.txt。`n"
-            $notes = Join-Path $env:RUNNER_TEMP 'unipus-release-notes.md'
-            $body | Set-Content -LiteralPath $notes -Encoding utf8
-            gh release edit v0.1.1 --repo $env:GITHUB_REPOSITORY --notes-file $notes
-            if ($LASTEXITCODE -ne 0) { throw 'Release notes update failed' }
+            $body += "`n`n<!-- unipus-supplement -->`n## U 校园使用说明与一键补抓补充包`n下载 UnipusAI-v3.6-usage-and-import.zip，解压到完整整合包根目录并合并文件夹。也可单独下载 UnipusAI-Usage.zh-CN.md（中文说明）和 Import-Missing-Units.cmd。`n补抓脚本读取已保存配置，执行 dump-text 增量导入；不会强制清库或执行答题与课程提交。遇到权限或限流错误仍需按说明排查。`n原 full ZIP 保留不变，此补充包不含账号、配置、数据库或新二进制。校验值见 SHA256SUMS-unipus.txt。`n"
+          }
+          $notes = Join-Path $env:RUNNER_TEMP 'unipus-release-notes.md'
+          $body | Set-Content -LiteralPath $notes -Encoding utf8
+          gh release edit v0.1.1 --repo $env:GITHUB_REPOSITORY --notes-file $notes
+          if ($LASTEXITCODE -ne 0) { throw 'Release notes update failed' }
+          $release = gh release view v0.1.1 --repo $env:GITHUB_REPOSITORY --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Asset listing failed' }
+          if ($release.assets.name -contains 'U.md') {
+            gh release delete-asset v0.1.1 U.md --yes --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw 'Legacy supplement filename cleanup failed' }
           }
