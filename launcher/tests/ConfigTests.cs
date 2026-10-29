@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -19,6 +19,9 @@ namespace TimeSaver.Tests
             UnipusSecretPolicy(runner);
             BackupRestore(runner);
             LogMasking(runner);
+            AccountTests.Model(runner);
+            OtherAccountTests.Model(runner);
+            ToolPathProbeTests.Run(runner);
         }
 
         private const string IniFixture =

@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 
 REPO=Path(__file__).resolve().parents[1]
-VERSION='v0.1.1'
+VERSION='v0.1.2'
 ASSETS={
  'autovisor.zip':('https://github.com/CXRunfree/Autovisor/releases/download/3.18.4/Autovisor-3.18.4-windows-amd64.zip','11cea9e9ac1d9f122041cd82c7e6befcc891487396f16e82386f06cf2f8ea32d'),
  'unipus.7z':('https://github.com/Zzj-klwgxdz/UnipusAI/releases/download/3.6/UnipusAI-v3.6-windows-x86-64.7z','8d63bbd34d1c65be7a2bf60bf1c02570ea5d280c90209668dfa37f2494d8ed43'),
@@ -142,6 +142,7 @@ def main():
                 (license_dir/(name.removesuffix('-source.zip')+'-'+str(i)+'.txt')).write_bytes(source.read(entry))
     shutil.copy2(REPO/'TimeSaver.exe',bundle/'TimeSaver.exe')
     shutil.copy2(REPO/'README.md',bundle/'README.md')
+    shutil.copytree(REPO/'docs',bundle/'docs')
     (bundle/'launcher').mkdir(exist_ok=True)
     (bundle/'PACK-CONTENTS.json').write_text(json.dumps(provenance,ensure_ascii=False,indent=2),encoding='utf-8')
     forbidden={'cookies.sqlite','places.sqlite','key4.db','logins.db','logins.json','sessionstore.jsonlz4'}

@@ -16,6 +16,8 @@ namespace TimeSaver.Model
     /// </summary>
     public sealed class UnipusSettings
     {
+        public string Username = string.Empty;
+        public bool PasswordConfigured;
         public string BaseUrl = string.Empty;
         public string Model = string.Empty;
         public string LearningStrategy = string.Empty;
@@ -51,6 +53,9 @@ namespace TimeSaver.Model
                 throw new InvalidDataException("config.json 顶层不是 JSON 对象: " + path);
 
             settings.BaseUrl = ReadString(root, "base_url", settings.Warnings, string.Empty);
+            settings.Username = ReadString(root, "username", settings.Warnings, string.Empty);
+            JsonValue password = root.Get("password");
+            settings.PasswordConfigured = password != null && password.Kind == JsonKind.String && !string.IsNullOrEmpty(password.Text);
             settings.Model = ReadString(root, "model", settings.Warnings, string.Empty);
             settings.LearningStrategy = ReadString(root, "learning_strategy", settings.Warnings, "learn_all_compusory_course");
             settings.WhisperModel = ReadString(root, "whisper_model", settings.Warnings, "base");
@@ -208,6 +213,45 @@ namespace TimeSaver.Model
             ApiKeyConfigured = apiKeyChange == SecretChange.Replace
                 ? !string.IsNullOrEmpty(newApiKey)
                 : (apiKeyChange == SecretChange.Clear ? false : ApiKeyConfigured);
+            return backupPath;
+        }
+
+        public string SaveAccount(BackupService backups, string username, SecretChange passwordChange, string newPassword)
+        {
+            username = (username ?? string.Empty).Trim();
+            if (username.Length == 0) throw new ArgumentException("请填写 U 校园账号。");
+            // Reload to preserve AI settings changed since this form was opened.
+            UnipusSettings latest = Load(_path);
+            bool switching = !string.Equals(latest.Username, username, StringComparison.Ordinal);
+            if (switching && (passwordChange != SecretChange.Replace || string.IsNullOrEmpty(newPassword)))
+                throw new ArgumentException("更换账号时请同时填写该账号的密码。");
+            if (passwordChange == SecretChange.Replace && string.IsNullOrEmpty(newPassword))
+                throw new ArgumentException("新密码不能为空。");
+            string backupPath = string.Empty;
+            if (backups != null)
+            {
+                BackupEntry entry = backups.Create("unipus", _path);
+                if (entry != null) backupPath = entry.FilePath;
+            }
+            JsonValue root = latest._document.Root;
+            root.Set("username", JsonValue.NewString(username));
+            if (passwordChange == SecretChange.Replace) root.Set("password", JsonValue.NewString(newPassword));
+            else if (passwordChange == SecretChange.Clear) root.Set("password", JsonValue.NewString(string.Empty));
+            if (switching || passwordChange != SecretChange.Keep)
+            {
+                foreach (string key in new string[] { "cookie", "authorization", "refresh_token", "open_id", "x_annotator_auth_token" })
+                    root.Set(key, JsonValue.NewString(string.Empty));
+                foreach (string key in new string[] { "jwt_expire", "rt_expire" })
+                    root.Set(key, JsonValue.NewNumber(0));
+            }
+            if (switching)
+            {
+                foreach (string key in new string[] { "course_id", "class_id", "curricula_id", "u_school", "publish_version" })
+                    root.Set(key, JsonValue.NewString(string.Empty));
+            }
+            string temp = _path + ".timesaver-tmp";
+            File.WriteAllText(temp, latest._document.Render(), new UTF8Encoding(false));
+            File.Replace(temp, _path, null, true);
             return backupPath;
         }
 

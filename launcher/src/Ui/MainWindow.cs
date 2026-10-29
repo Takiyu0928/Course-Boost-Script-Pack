@@ -55,6 +55,7 @@ namespace TimeSaver.Ui
         {
             public readonly Dictionary<string, string> Values = new Dictionary<string, string>(StringComparer.Ordinal);
             public string Secret = string.Empty;
+            public string AccountSecret = string.Empty;
             public bool Dirty;
         }
 
@@ -262,6 +263,20 @@ namespace TimeSaver.Ui
             path.Margin = new Thickness(0, 4, 0, 0);
             panel.Children.Add(path);
 
+            {
+                Button account = Theme.Button("账号配置", true, false);
+                account.Margin = new Thickness(0, 12, 0, 0);
+                account.HorizontalAlignment = HorizontalAlignment.Left;
+                account.ToolTip = "设置当前工具账号或打开其登录入口";
+                account.Click += delegate
+                {
+                    _tabs.SelectedIndex = 1;
+                    ScrollViewer scroller = ((TabItem)_tabs.SelectedItem).Content as ScrollViewer;
+                    if (scroller != null) scroller.ScrollToTop();
+                };
+                panel.Children.Add(account);
+            }
+
             foreach (ToolEntryPoint entry in _current.Entries)
             {
                 if (entry.Confirmed) continue;
@@ -421,6 +436,9 @@ namespace TimeSaver.Ui
             config.Click += delegate { OnOpenConfig(); };
             second.Children.Add(dir);
             second.Children.Add(config);
+            Button probe = Theme.Button("探测启动路径", false, false);
+            probe.Click += delegate { OnProbeToolPath(); };
+            second.Children.Add(probe);
             panel.Children.Add(second);
 
             return panel;
@@ -428,21 +446,241 @@ namespace TimeSaver.Ui
 
         /* ---------------- 设置 tab ---------------- */
 
+        private void OnProbeToolPath()
+        {
+            ToolDefinition tool = _current;
+            if (tool == null) return;
+            Window dialog = new Window
+            {
+                Owner = this, Title = "探测启动路径 · " + tool.Name,
+                Width = 760, Height = 480, MinWidth = 620, MinHeight = 380,
+                Background = Theme.Background, FontFamily = Theme.UiFont,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            StackPanel panel = new StackPanel { Margin = new Thickness(18) };
+            panel.Children.Add(Theme.Label("当前目录：" + _context.ToolDirectory(tool), Theme.FontBody, Theme.Ink));
+            foreach (ToolEntryPoint entry in tool.Entries)
+            {
+                string path = Path.Combine(_context.ToolDirectory(tool), entry.ExeRelativePath);
+                panel.Children.Add(Theme.Muted13((File.Exists(path) ? "已找到 · " : "缺失 · ") + entry.Name + "：" + path));
+            }
+            panel.Children.Add(Theme.Muted13("默认只在整合包目录内探测（最多 4 层、1000 个目录）；也可选择其他文件夹。探测不会执行脚本，找到候选后需选择并应用。"));
+            ListBox list = new ListBox { Height = 140, Margin = new Thickness(0, 10, 0, 8) };
+            panel.Children.Add(list);
+            TextBlock status = Theme.Muted13(string.Empty);
+            panel.Children.Add(status);
+            StackPanel actions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+            Button scan = Theme.Button("重新探测", false, false);
+            Button browse = Theme.Button("选择文件夹…", false, false);
+            Button apply = Theme.Button("使用所选路径", true, false);
+            apply.IsEnabled = false;
+            Action<string> search = delegate(string root)
+            {
+                list.Items.Clear();
+                foreach (ToolPathCandidate candidate in ToolPathProbe.Find(tool, root)) list.Items.Add(candidate);
+                status.Text = list.Items.Count == 0 ? "未找到完整工具目录。请选工具所在文件夹，确认 EXE 和配置文件齐全。" : "找到 " + list.Items.Count + " 个候选；请选择要使用的目录。";
+                apply.IsEnabled = false;
+                if (list.Items.Count > 0) list.SelectedIndex = 0;
+            };
+            list.SelectionChanged += delegate { apply.IsEnabled = list.SelectedItem is ToolPathCandidate; };
+            scan.Click += delegate { search(_context.Paths.InstallRoot); };
+            browse.Click += delegate
+            {
+                using (System.Windows.Forms.FolderBrowserDialog picker = new System.Windows.Forms.FolderBrowserDialog())
+                {
+                    picker.Description = "选择脚本文件夹或包含脚本的上级文件夹";
+                    picker.SelectedPath = _context.Paths.InstallRoot;
+                    if (picker.ShowDialog() == System.Windows.Forms.DialogResult.OK) search(picker.SelectedPath);
+                }
+            };
+            apply.Click += delegate
+            {
+                ToolPathCandidate candidate = list.SelectedItem as ToolPathCandidate;
+                if (candidate == null) return;
+                bool running = _context.Supervisor.IsRunning(tool.Id);
+                foreach (ToolEntryPoint entry in tool.Entries)
+                    if (ProcessSupervisor.FindRunningByExecutable(Path.Combine(_context.ToolDirectory(tool), entry.ExeRelativePath)).Count > 0) running = true;
+                if (running) { Alert("请先退出该工具，再更改启动路径。", "启动路径"); return; }
+                if (HasDirtyDraft(tool.Id)) { Alert("设置页有未保存的修改，请先保存后再更改路径，避免把草稿写入其他副本。", "启动路径"); return; }
+                if (!Confirm("将此工具的启动、配置、备份目标切换到：\n" + candidate.Directory + "\n路径会保存到 launcher/tool-paths.json。不会复制或移动工具文件。", "使用启动路径", false)) return;
+                try
+                {
+                    ToolPathProbe.Save(_context.Paths, tool, candidate, _context.Backups);
+                    _drafts.Remove(tool.Id);
+                    _lastMessage = "已更新 " + tool.Name + " 的启动路径";
+                    _context.Log.Info("更新工具启动路径：" + tool.Id);
+                    dialog.Close();
+                    RebuildTabs();
+                }
+                catch (Exception) { Alert("路径保存失败，请检查必需文件及路径配置文件的格式和权限。", "启动路径"); }
+            };
+            actions.Children.Add(scan);
+            actions.Children.Add(browse);
+            actions.Children.Add(apply);
+            panel.Children.Add(actions);
+            dialog.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            search(_context.Paths.InstallRoot);
+            dialog.ShowDialog();
+        }
+
         private UIElement BuildSettingsTab()
         {
             StackPanel panel = new StackPanel();
-            if (_current.ConfigKind == ToolConfigKind.Ini) BuildAutovisorSettings(panel);
+            if (_current.Id == "xuexitong") BuildXuexitongAccount(panel);
+            else if (_current.Id == "domooc") BuildDomoocAccount(panel);
+            else if (_current.ConfigKind == ToolConfigKind.Ini) BuildAutovisorSettings(panel);
             else if (_current.ConfigKind == ToolConfigKind.Json) BuildUnipusSettings(panel);
             else
             {
-                panel.Children.Add(Theme.Body("该工具没有可由启动器安全编辑的配置文件。"));
+                panel.Children.Add(Theme.Body("请使用该工具自身的账号或登录界面。"));
+                Button native = Theme.Button("打开工具登录界面", true, false);
+                native.Click += delegate { OnLaunch(); };
+                panel.Children.Add(native);
                 panel.Children.Add(Theme.Muted13("请在其自身界面里设置；启动器不会替它生成或改动配置。"));
             }
             return panel;
         }
 
+        private void BuildDomoocAccount(StackPanel panel)
+        {
+            panel.Children.Add(Theme.Label("中国大学 MOOC 账号登录", Theme.FontSection, Theme.Ink));
+            panel.Children.Add(Theme.Body("domooc 使用网页账号登录。点击下方按钮，在随包 Firefox 打开的中国大学 MOOC 页面选择“登录 / 注册”，填写账号密码或扫码登录。"));
+            panel.Children.Add(Theme.Muted13("登录态保存在 domooc 的独立 Profile 中。更换账号请先在网页退出，再登录新账号；启动器不保存额外密码，也不会删除浏览器登录数据。"));
+            Button login = Theme.Button("打开 MOOC 登录页面", true, false);
+            login.Margin = new Thickness(0, 12, 0, 0);
+            login.HorizontalAlignment = HorizontalAlignment.Left;
+            login.Click += delegate
+            {
+                ToolMode mode = new ToolMode { Id = "login", Name = "网页登录", EntryPointId = "login" };
+                PreflightReport report = _context.Runner.Preflight(_current, mode);
+                if (report.Blocked)
+                {
+                    Alert("请检查 domooc 文件是否齐全；若浏览器已运行，请在原浏览器中打开 https://www.icourse163.org/ 登录。", "账号登录");
+                    return;
+                }
+                LaunchResult result = _context.Runner.Launch(_current, mode);
+                _lastMessage = result.Message;
+                if (result.Outcome != LaunchOutcome.Started)
+                    Alert(result.Message + "\n如果浏览器已打开，请在原窗口访问 https://www.icourse163.org/ 登录或切换账号。", "账号登录");
+                RebuildTabs();
+            };
+            panel.Children.Add(login);
+        }
+
+        private void BuildXuexitongAccount(StackPanel panel)
+        {
+            panel.Children.Add(Theme.Label("学习通账号配置", Theme.FontSection, Theme.Ink));
+            panel.Children.Add(Theme.Muted13("保存后再启动学习通工具。更换账号时请填写新密码，并在工具中重新选择课程。"));
+            XuexitongAccountSettings settings;
+            try { settings = XuexitongAccountSettings.Load(_context.ConfigPath(_current)); }
+            catch (Exception)
+            {
+                panel.Children.Add(Theme.Label("无法读取学习通账号配置，请检查 task/tool/account_info.json 是否存在且格式正确。", Theme.FontSmall, Theme.AccentRed));
+                return;
+            }
+            FormDraft draft = GetDraft(_current.Id);
+            TextBox username = Theme.TextField(string.Empty, false);
+            username.Name = "XuexitongUsername";
+            BindText(username, draft, "accountUsername", settings.Username);
+            PasswordBox password = Theme.PasswordField(draft.AccountSecret);
+            password.Name = "XuexitongPassword";
+            password.PasswordChanged += delegate { draft.AccountSecret = password.Password; MarkDirty(draft); };
+            CheckBox clear = Theme.Check("清除已保存的账号密码", false);
+            BindCheck(clear, draft, "clearAccountPassword", false);
+            panel.Children.Add(Theme.Field("学习通账号 / 手机号", username));
+            panel.Children.Add(Theme.Field(settings.PasswordConfigured ? "密码（已保存；留空即保留）" : "密码（未设置）", password));
+            panel.Children.Add(clear);
+            Button save = Theme.Button("保存账号", true, false);
+            save.Margin = new Thickness(0, 12, 0, 0);
+            save.HorizontalAlignment = HorizontalAlignment.Left;
+            save.Click += delegate
+            {
+                bool running = _context.Supervisor.IsRunning("xuexitong");
+                foreach (ToolEntryPoint entry in _current.Entries)
+                    if (ProcessSupervisor.FindRunningByExecutable(Path.Combine(_context.ToolDirectory(_current), entry.ExeRelativePath)).Count > 0) running = true;
+                if (running) { Alert("请先退出学习通工具，再保存账号，避免配置被覆盖。", "账号配置"); return; }
+                string name = username.Text.Trim();
+                SecretChange change = clear.IsChecked == true ? SecretChange.Clear
+                    : (password.Password.Length > 0 ? SecretChange.Replace : SecretChange.Keep);
+                if (name.Length == 0 || (name != settings.Username && (change != SecretChange.Replace || password.Password.Length == 0)))
+                { Alert("请填写账号；更换账号时需要同时填写新密码。", "账号配置"); return; }
+                if (!Confirm("保存学习通账号配置？会先备份。\n更换账号将清除旧课程选择，API 和其他设置保持不变。\n账号密码保存在本地 account_info.json 中。", "保存账号", false)) return;
+                try
+                {
+                    settings.Save(_context.Backups, name, change, password.Password);
+                    _drafts.Remove(_current.Id);
+                    _lastMessage = "学习通账号已保存；请重新启动工具";
+                    _context.Log.Info("保存学习通账号配置（已备份）");
+                    RebuildTabs();
+                }
+                catch (Exception) { Alert("保存失败，请检查配置文件格式或是否被占用。", "账号配置"); }
+            };
+            panel.Children.Add(save);
+        }
+
+        private void BuildUnipusAccount(StackPanel panel, UnipusSettings settings, FormDraft draft)
+        {
+            panel.Children.Add(Theme.Label("U 校园账号配置", Theme.FontSection, Theme.Ink));
+            panel.Children.Add(Theme.Muted13("保存后重新启动 UnipusAI 生效。更换账号需要填写新密码，并重新选择课程。"));
+            TextBox username = Theme.TextField(string.Empty, false);
+            username.Name = "UnipusUsername";
+            BindText(username, draft, "accountUsername", settings.Username);
+            PasswordBox password = Theme.PasswordField(draft.AccountSecret);
+            password.Name = "UnipusPassword";
+            password.PasswordChanged += delegate { draft.AccountSecret = password.Password; MarkDirty(draft); };
+            CheckBox clear = Theme.Check("清除已保存的账号密码", false);
+            BindCheck(clear, draft, "clearAccountPassword", false);
+            panel.Children.Add(Theme.Field("U 校园账号", username));
+            panel.Children.Add(Theme.Field(settings.PasswordConfigured ? "账号密码（已保存；留空即保留）" : "账号密码（未设置）", password));
+            panel.Children.Add(clear);
+            Button save = Theme.Button("保存账号", true, false);
+            save.Margin = new Thickness(0, 10, 0, 14);
+            save.HorizontalAlignment = HorizontalAlignment.Left;
+            save.Click += delegate
+            {
+                bool running = _context.Supervisor.IsRunning("unipus");
+                foreach (Process process in Process.GetProcessesByName("UnipusAI"))
+                {
+                    running = true;
+                    process.Dispose();
+                }
+                if (running)
+                {
+                    Alert("请先正常停止 UnipusAI，再保存账号，避免运行中的工具覆盖配置。", "账号配置");
+                    return;
+                }
+                SecretChange change = clear.IsChecked == true ? SecretChange.Clear
+                    : (password.Password.Length > 0 ? SecretChange.Replace : SecretChange.Keep);
+                string name = username.Text.Trim();
+                if (name.Length == 0 || (name != settings.Username && (change != SecretChange.Replace || password.Password.Length == 0)))
+                {
+                    Alert("请填写账号；更换账号时需要同时填写新密码。", "账号配置");
+                    return;
+                }
+                if (!Confirm("保存 U 校园账号配置？会先备份。\n更改账号或密码将清除旧登录信息；更换账号还会清除旧课程选择，下次启动重新登录。\n账号密码保存在工具本地 config.json 中。AI 设置保持不变。", "保存账号", false)) return;
+                try
+                {
+                    settings.SaveAccount(_context.Backups, name, change, password.Password);
+                    draft.Values.Remove("accountUsername");
+                    draft.Values.Remove("clearAccountPassword");
+                    draft.AccountSecret = string.Empty;
+                    draft.Dirty = draft.Values.Count > 0 || draft.Secret.Length > 0;
+                    _lastMessage = "账号已保存；请重新启动 UnipusAI";
+                    _context.Log.Info("保存 unipus 账号配置（已备份）");
+                    RebuildTabs();
+                }
+                catch (Exception)
+                {
+                    Alert("账号保存失败，请检查配置文件格式或是否被其他程序占用。", "账号配置");
+                }
+            };
+            panel.Children.Add(save);
+            panel.Children.Add(Theme.Label("AI 与学习设置", Theme.FontSection, Theme.Ink));
+        }
+
                 private void BuildAutovisorSettings(StackPanel panel)
         {
+            panel.Children.Add(Theme.Label("Autovisor 账号配置", Theme.FontSection, Theme.Ink));
             string configPath = _context.ConfigPath(_current);
             AutovisorSettings settings;
             try
@@ -597,6 +835,8 @@ namespace TimeSaver.Ui
 
             FormDraft draft = GetDraft(_current.Id);
 
+            BuildUnipusAccount(panel, settings, draft);
+
             TextBox baseUrl = Theme.TextField(string.Empty, false);
             BindText(baseUrl, draft, "baseUrl", settings.BaseUrl);
             TextBox model = Theme.TextField(string.Empty, false);
@@ -697,7 +937,10 @@ namespace TimeSaver.Ui
                 {
                     string backup = settings.Save(_context.Backups, change, apiKey.Password);
                     _context.Backups.Prune("unipus", 30);
-                    _drafts.Remove(_current.Id);
+                    foreach (string key in new List<string>(draft.Values.Keys))
+                        if (key != "accountUsername" && key != "clearAccountPassword") draft.Values.Remove(key);
+                    draft.Secret = string.Empty;
+                    draft.Dirty = draft.Values.Count > 0 || draft.AccountSecret.Length > 0;
                     _lastMessage = "已保存 config.json" + (string.IsNullOrEmpty(backup) ? "" : "（备份 " + Path.GetFileName(backup) + "）");
                     _context.Log.Info("保存 unipus 配置，备份 " + backup);
                     RebuildTabs();
@@ -1222,16 +1465,9 @@ namespace TimeSaver.Ui
         {
             try
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = RepositoryUrl,
-                    UseShellExecute = true
-                });
+                Process.Start(new ProcessStartInfo { FileName = RepositoryUrl, UseShellExecute = true });
             }
-            catch (Exception error)
-            {
-                Alert("打开项目仓库失败：" + error.Message, "项目仓库");
-            }
+            catch (Exception error) { Alert("打开项目仓库失败：" + error.Message, "项目仓库"); }
         }
 
         /// <summary>Fixed executable + one quoted path. Never a shell string built from input.</summary>

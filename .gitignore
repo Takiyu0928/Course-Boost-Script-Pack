@@ -10,6 +10,7 @@ dist/
 # Local settings, credentials, state and runtime data
 launcher/state.json
 launcher/tools.json
+launcher/tool-paths.json
 launcher/logs/
 launcher/backups/
 **/config.json

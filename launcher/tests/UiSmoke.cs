@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows;
@@ -101,6 +101,8 @@ namespace TimeSaver.Tests
             try
             {
                 DraftTests.Run(runner);
+                AccountTests.Ui(runner);
+                OtherAccountTests.Ui(runner);
             }
             catch (Exception error)
             {

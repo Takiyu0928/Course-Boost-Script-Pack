@@ -89,6 +89,7 @@ namespace TimeSaver.Model
             catalog.Tools.Add(BuildDomooc());
             catalog.Tools.Add(BuildXuexitong(paths));
             catalog.AppendExtras(paths);
+            ToolPathProbe.ApplySaved(paths, catalog);
             return catalog;
         }
 
@@ -182,6 +183,14 @@ namespace TimeSaver.Model
             browser.Confirmed = true;
             tool.Entries.Add(browser);
 
+            ToolEntryPoint login = new ToolEntryPoint();
+            login.Id = "login";
+            login.Name = "MOOC 网页登录";
+            login.ExeRelativePath = browser.ExeRelativePath;
+            login.Arguments = new string[] { "-profile", "{profile}", "-no-remote", "https://www.icourse163.org/" };
+            login.Evidence = "首次使用步骤.md：使用随包浏览器打开中国大学 MOOC，在网站内登录，登录态保存在独立 Profile。";
+            tool.Entries.Add(login);
+
             ToolEntryPoint automation = new ToolEntryPoint();
             automation.Id = "browser-automation";
             automation.Name = "Firefox（自动化准备）";
@@ -219,13 +228,15 @@ namespace TimeSaver.Model
             tool.Id = "xuexitong";
             tool.Name = "学习通刷课 26.10";
             tool.Directory = @"xuexitong_shuake26.10\exe)";
+            if (!Directory.Exists(Path.Combine(paths.InstallRoot, tool.Directory)) &&
+                Directory.Exists(Path.Combine(paths.InstallRoot, @"学习通\exe)")))
+                tool.Directory = @"学习通\exe)";
             tool.Description = "学习通刷课工具（start.exe / main.exe，随附 edgedriver_win64 与用户须知）。";
-            tool.ConfigKind = ToolConfigKind.None;
-            string mainPath = "main.exe";
-            if (!File.Exists(paths.Combine(tool.Directory, mainPath)) &&
-                File.Exists(paths.Combine(tool.Directory, "task", "main.exe")))
-                mainPath = @"task\main.exe";
-            tool.RequiredFiles = new string[] { "start.exe", mainPath };
+            tool.ConfigKind = ToolConfigKind.Json;
+            tool.ConfigRelativePath = @"task\tool\account_info.json";
+            string mainPath = File.Exists(Path.Combine(paths.InstallRoot, tool.Directory, "main.exe"))
+                ? "main.exe" : @"task\main.exe";
+            tool.RequiredFiles = new string[] { "start.exe", mainPath, tool.ConfigRelativePath };
             tool.OptionalFiles = new string[] { "edgedriver_win64", "用户须知.pdf", @"task\tool\Help.txt" };
             tool.DocsHint = "官方说明只以问答形式提到 Start/Main，没有入口清单；启动器不宣称已验证，运行前请自行选择并核对。";
 
@@ -240,7 +251,7 @@ namespace TimeSaver.Model
 
             ToolEntryPoint main = new ToolEntryPoint();
             main.Id = "main";
-            main.Name = mainPath;
+            main.Name = "main.exe";
             main.ExeRelativePath = mainPath;
             main.Confirmed = false;
             main.Evidence = "同一问答的兜底说法：「如果还是没有反应，那就再把这个窗口关掉，直接双击运行那个 Main 程序」。";
